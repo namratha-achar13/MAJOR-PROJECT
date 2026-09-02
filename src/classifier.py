@@ -1,151 +1,243 @@
 import numpy as np
+import pandas as pd
+import joblib
+from pathlib import Path
+
 from sklearn.ensemble import RandomForestClassifier
-from sklearn.preprocessing import LabelEncoder
+from sklearn.metrics import accuracy_score, classification_report, confusion_matrix
 
 
-def extract_features(iq_signal, sample_rate=2e6):
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
 
-    # Signal magnitude
-    magnitude = np.abs(iq_signal)
+DATA_FILE = PROJECT_ROOT / "data" / "real_rf_features.csv"
+MODEL_DIR = PROJECT_ROOT / "models"
 
-    # Signal power
-    power = np.mean(magnitude ** 2)
+MODEL_FILE = MODEL_DIR / "real_rf_model.pkl"
 
-    # Mean magnitude
-    mean_magnitude = np.mean(magnitude)
+FEATURE_COLUMNS = [
+    "peak_frequency",
+    "power",
+    "mean_magnitude",
+    "std_magnitude",
+    "bandwidth",
+    "spectral_centroid",
+    "spectral_spread",
+    "spectral_flatness",
+    "spectral_entropy"
+]
 
-    # Standard deviation
-    std_magnitude = np.std(magnitude)
+TARGET_COLUMN = "label"
 
-    # FFT
-    N = len(iq_signal)
+TEST_CAPTURE = "capture_005.npy"
 
-    fft_result = np.fft.fft(iq_signal)
 
-    fft_shifted = np.fft.fftshift(fft_result)
+def load_dataset():
+    if not DATA_FILE.exists():
+        raise FileNotFoundError(
+            f"Real RF dataset not found: {DATA_FILE}"
+        )
 
-    spectrum = np.abs(fft_shifted)
+    dataset = pd.read_csv(DATA_FILE)
 
-    frequencies = np.fft.fftshift(
-        np.fft.fftfreq(
-            N,
-            d=1 / sample_rate
+    required_columns = FEATURE_COLUMNS + [
+        TARGET_COLUMN,
+        "capture"
+    ]
+
+    for column in required_columns:
+        if column not in dataset.columns:
+            raise ValueError(
+                f"Missing required column: {column}"
+            )
+
+    return dataset
+
+
+def train_real_model():
+
+    dataset = load_dataset()
+
+    print()
+    print("REAL RF SIGNAL CLASSIFIER")
+    print("=========================")
+    print()
+
+    print(f"Dataset samples : {len(dataset)}")
+    print(
+        f"Number of features: {len(FEATURE_COLUMNS)}"
+    )
+    print(
+        f"Signal classes  : "
+        f"{sorted(dataset[TARGET_COLUMN].unique())}"
+    )
+    print()
+
+    # --------------------------------------------------
+    # Capture-level train/test split
+    # --------------------------------------------------
+
+    train_data = dataset[
+        dataset["capture"] != TEST_CAPTURE
+    ].copy()
+
+    test_data = dataset[
+        dataset["capture"] == TEST_CAPTURE
+    ].copy()
+
+    print("TRAINING DATA")
+    print("-------------")
+    print(f"Samples: {len(train_data)}")
+    print(
+        train_data[TARGET_COLUMN]
+        .value_counts()
+        .to_string()
+    )
+
+    print()
+
+    print("TEST DATA")
+    print("---------")
+    print(f"Samples: {len(test_data)}")
+    print(
+        test_data[TARGET_COLUMN]
+        .value_counts()
+        .to_string()
+    )
+
+    print()
+
+    # --------------------------------------------------
+    # Prepare features and labels
+    # --------------------------------------------------
+
+    X_train = train_data[FEATURE_COLUMNS]
+    y_train = train_data[TARGET_COLUMN]
+
+    X_test = test_data[FEATURE_COLUMNS]
+    y_test = test_data[TARGET_COLUMN]
+
+    # --------------------------------------------------
+    # Train Random Forest
+    # --------------------------------------------------
+
+    model = RandomForestClassifier(
+        n_estimators=200,
+        random_state=42
+    )
+
+    model.fit(
+        X_train,
+        y_train
+    )
+
+    # --------------------------------------------------
+    # Test
+    # --------------------------------------------------
+
+    predictions = model.predict(
+        X_test
+    )
+
+    accuracy = accuracy_score(
+        y_test,
+        predictions
+    )
+
+    print("REAL RF MODEL RESULTS")
+    print("=====================")
+
+    print(
+        f"Test accuracy: "
+        f"{accuracy * 100:.2f}%"
+    )
+
+    print()
+
+    print("Classification Report")
+    print("---------------------")
+
+    print(
+        classification_report(
+            y_test,
+            predictions,
+            labels=[
+                "bluetooth",
+                "wifi"
+            ],
+            zero_division=0
         )
     )
 
-    # Peak frequency
-    peak_index = np.argmax(spectrum)
+    print("Confusion Matrix")
+    print("----------------")
 
-    peak_frequency = abs(
-        frequencies[peak_index]
-    )
-
-    return [
-        peak_frequency,
-        power,
-        mean_magnitude,
-        std_magnitude
-    ]
-
-
-# =====================================================
-# CREATE TRAINING DATA
-# =====================================================
-
-signal_types = [
-    "wifi",
-    "bluetooth",
-    "fm",
-    "am"
-]
-
-X = []
-y = []
-
-
-for signal_type in signal_types:
-
-    filename = (
-        f"data/simulated_{signal_type}.npy"
-    )
-
-    signal = np.load(filename)
-
-    features = extract_features(signal)
-
-    X.append(features)
-    y.append(signal_type)
-
-
-# Convert to arrays
-
-X = np.array(X)
-y = np.array(y)
-
-
-# =====================================================
-# TRAIN CLASSIFIER
-# =====================================================
-
-label_encoder = LabelEncoder()
-
-y_encoded = label_encoder.fit_transform(y)
-
-
-model = RandomForestClassifier(
-    n_estimators=100,
-    random_state=42
-)
-
-
-model.fit(X, y_encoded)
-
-
-# =====================================================
-# TEST THE MODEL
-# =====================================================
-
-print("RF SIGNAL CLASSIFIER")
-print("====================")
-
-for signal_type in signal_types:
-
-    filename = (
-        f"data/simulated_{signal_type}.npy"
-    )
-
-    signal = np.load(filename)
-
-    features = extract_features(signal)
-
-    features_array = np.array(
-        features
-    ).reshape(1, -1)
-
-    prediction = model.predict(
-        features_array
-    )
-
-    probabilities = model.predict_proba(
-        features_array
-    )
-
-    predicted_label = (
-        label_encoder.inverse_transform(
-            prediction
-        )[0]
-    )
-
-    confidence = (
-        np.max(probabilities) * 100
+    cm = confusion_matrix(
+        y_test,
+        predictions,
+        labels=[
+            "bluetooth",
+            "wifi"
+        ]
     )
 
     print(
-        f"{signal_type.upper():10} → "
-        f"{predicted_label.upper():10} "
-        f"Confidence: {confidence:.2f}%"
+        pd.DataFrame(
+            cm,
+            index=[
+                "Actual Bluetooth",
+                "Actual Wi-Fi"
+            ],
+            columns=[
+                "Predicted Bluetooth",
+                "Predicted Wi-Fi"
+            ]
+        )
     )
 
+    # --------------------------------------------------
+    # Feature importance
+    # --------------------------------------------------
 
-print("====================")
-print("Classification complete!")
+    print()
+    print("FEATURE IMPORTANCE")
+    print("------------------")
+
+    importance = pd.Series(
+        model.feature_importances_,
+        index=FEATURE_COLUMNS
+    ).sort_values(
+        ascending=False
+    )
+
+    print(
+        importance.round(4).to_string()
+    )
+
+    # --------------------------------------------------
+    # Save model
+    # --------------------------------------------------
+
+    MODEL_DIR.mkdir(
+        parents=True,
+        exist_ok=True
+    )
+
+    joblib.dump(
+        model,
+        MODEL_FILE
+    )
+
+    print()
+    print("Model saved to:")
+    print(MODEL_FILE)
+
+    print()
+    print("=====================")
+    print("Real RF training complete!")
+    print("=====================")
+
+    return model, accuracy
+
+
+if __name__ == "__main__":
+    train_real_model()

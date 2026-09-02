@@ -1,23 +1,21 @@
 import numpy as np
+from pathlib import Path
+
+DEFAULT_SAMPLE_RATE = 20e6
+DC_EXCLUSION_BAND = 100e3
 
 
-def extract_features(iq_signal, sample_rate=2e6):
-    """
-    Extract useful numerical features from an I/Q signal.
+def extract_features(iq_signal, sample_rate=DEFAULT_SAMPLE_RATE):
+    iq_signal = np.asarray(iq_signal)
 
-    Returns:
-        Dictionary containing signal features.
-    """
+    if len(iq_signal) == 0:
+        raise ValueError("I/Q signal is empty.")
 
-    # -----------------------------------------
-    # 1. Calculate signal power
-    # -----------------------------------------
+    # --------------------------------------------------
+    # Time-domain features
+    # --------------------------------------------------
 
     power = np.mean(np.abs(iq_signal) ** 2)
-
-    # -----------------------------------------
-    # 2. Calculate magnitude
-    # -----------------------------------------
 
     magnitude = np.abs(iq_signal)
 
@@ -25,19 +23,25 @@ def extract_features(iq_signal, sample_rate=2e6):
 
     std_magnitude = np.std(magnitude)
 
-    # -----------------------------------------
-    # 3. Perform FFT
-    # -----------------------------------------
+    # --------------------------------------------------
+    # FFT
+    # --------------------------------------------------
 
     N = len(iq_signal)
 
-    fft_result = np.fft.fft(iq_signal)
+    # Remove DC component
+    iq_centered = iq_signal - np.mean(iq_signal)
+
+    # Reduce spectral leakage
+    window = np.hanning(N)
+
+    windowed_signal = iq_centered * window
+
+    fft_result = np.fft.fft(windowed_signal)
 
     fft_shifted = np.fft.fftshift(fft_result)
 
-    spectrum = np.abs(fft_shifted)
-
-    # Frequency axis
+    spectrum = np.abs(fft_shifted) ** 2
 
     frequencies = np.fft.fftshift(
         np.fft.fftfreq(
@@ -46,127 +50,255 @@ def extract_features(iq_signal, sample_rate=2e6):
         )
     )
 
-    # -----------------------------------------
-    # 4. Find peak frequency
-    # -----------------------------------------
+    # --------------------------------------------------
+    # Remove DC region
+    # --------------------------------------------------
 
-    peak_index = np.argmax(spectrum)
-
-    peak_frequency = abs(
-        frequencies[peak_index]
+    valid_indices = (
+        np.abs(frequencies) >= DC_EXCLUSION_BAND
     )
 
-    # -----------------------------------------
-    # 5. Estimate bandwidth
-    # -----------------------------------------
+    valid_spectrum = spectrum[valid_indices]
 
-    threshold = 0.5 * np.max(spectrum)
+    valid_frequencies = frequencies[valid_indices]
+
+    if len(valid_spectrum) == 0:
+        raise ValueError(
+            "No frequency bins remain after DC exclusion."
+        )
+
+    # --------------------------------------------------
+    # Peak frequency
+    # --------------------------------------------------
+
+    peak_index = np.argmax(valid_spectrum)
+
+    peak_frequency = abs(
+        valid_frequencies[peak_index]
+    )
+
+    # --------------------------------------------------
+    # Bandwidth
+    # --------------------------------------------------
+
+    threshold = 0.25 * np.max(valid_spectrum)
 
     signal_indices = np.where(
-        spectrum >= threshold
+        valid_spectrum >= threshold
     )[0]
 
-    if len(signal_indices) > 0:
+    if len(signal_indices) > 1:
 
         bandwidth = (
-            frequencies[signal_indices[-1]]
-            - frequencies[signal_indices[0]]
+            valid_frequencies[signal_indices[-1]]
+            - valid_frequencies[signal_indices[0]]
         )
 
         bandwidth = abs(bandwidth)
 
     else:
 
-        bandwidth = 0
+        bandwidth = 0.0
 
-    # -----------------------------------------
-    # Store features
-    # -----------------------------------------
+    # --------------------------------------------------
+    # Normalize spectral power
+    # --------------------------------------------------
+
+    total_spectral_power = np.sum(
+        valid_spectrum
+    )
+
+    if total_spectral_power <= 0:
+
+        spectral_centroid = 0.0
+        spectral_spread = 0.0
+        spectral_flatness = 0.0
+        spectral_entropy = 0.0
+
+    else:
+
+        probability = (
+            valid_spectrum
+            / total_spectral_power
+        )
+
+        # --------------------------------------------------
+        # Spectral centroid
+        # --------------------------------------------------
+
+        spectral_centroid = np.sum(
+            np.abs(valid_frequencies)
+            * probability
+        )
+
+        # --------------------------------------------------
+        # Spectral spread
+        # --------------------------------------------------
+
+        spectral_spread = np.sqrt(
+            np.sum(
+                (
+                    np.abs(valid_frequencies)
+                    - spectral_centroid
+                ) ** 2
+                * probability
+            )
+        )
+
+        # --------------------------------------------------
+        # Spectral flatness
+        # --------------------------------------------------
+
+        positive_spectrum = (
+            valid_spectrum + 1e-12
+        )
+
+        geometric_mean = np.exp(
+            np.mean(
+                np.log(
+                    positive_spectrum
+                )
+            )
+        )
+
+        arithmetic_mean = np.mean(
+            positive_spectrum
+        )
+
+        spectral_flatness = (
+            geometric_mean
+            / arithmetic_mean
+        )
+
+        # --------------------------------------------------
+        # Spectral entropy
+        # --------------------------------------------------
+
+        spectral_entropy = -np.sum(
+            probability
+            * np.log2(
+                probability + 1e-12
+            )
+        )
+
+    # --------------------------------------------------
+    # Feature dictionary
+    # --------------------------------------------------
 
     features = {
-        "peak_frequency": peak_frequency,
-        "power": power,
-        "mean_magnitude": mean_magnitude,
-        "std_magnitude": std_magnitude,
-        "bandwidth": bandwidth
+
+        # Existing features
+        "peak_frequency": float(
+            peak_frequency
+        ),
+
+        "power": float(
+            power
+        ),
+
+        "mean_magnitude": float(
+            mean_magnitude
+        ),
+
+        "std_magnitude": float(
+            std_magnitude
+        ),
+
+        "bandwidth": float(
+            bandwidth
+        ),
+
+        # New spectral features
+        "spectral_centroid": float(
+            spectral_centroid
+        ),
+
+        "spectral_spread": float(
+            spectral_spread
+        ),
+
+        "spectral_flatness": float(
+            spectral_flatness
+        ),
+
+        "spectral_entropy": float(
+            spectral_entropy
+        )
     }
 
     return features
 
 
-# =====================================================
-# TEST THE FEATURE EXTRACTION
-# =====================================================
+def load_iq_file(file_path):
+
+    file_path = Path(file_path)
+
+    if not file_path.exists():
+
+        raise FileNotFoundError(
+            f"I/Q file not found: {file_path}"
+        )
+
+    return np.load(file_path)
+
 
 if __name__ == "__main__":
 
-    signal_types = [
-        "wifi",
-        "bluetooth",
-        "fm",
-        "am"
-    ]
+    PROJECT_ROOT = (
+        Path(__file__).resolve().parent.parent
+    )
 
-    print("RF SIGNAL FEATURE EXTRACTION")
-    print("============================")
+    iq_file = (
+        PROJECT_ROOT
+        / "data"
+        / "real_iq_samples.npy"
+    )
 
-    for signal_type in signal_types:
+    print(
+        "REAL PLUTO SDR FEATURE EXTRACTION"
+    )
 
-        # Load signal
+    print(
+        "================================="
+    )
 
-        filename = (
-            f"data/simulated_{signal_type}.npy"
-        )
+    signal = load_iq_file(iq_file)
 
-        signal = np.load(filename)
+    print(
+        f"Loaded samples : {len(signal)}"
+    )
 
-        # Extract features
+    print(
+        f"Data type      : {signal.dtype}"
+    )
 
-        features = extract_features(signal)
+    features = extract_features(
+        signal,
+        sample_rate=DEFAULT_SAMPLE_RATE
+    )
 
-        print("\nSignal:", signal_type.upper())
+    print()
+    print("Extracted Features")
+    print("------------------")
 
-        print(
-            "Peak Frequency:",
-            round(
-                features["peak_frequency"] / 1e3,
-                2
-            ),
-            "kHz"
-        )
+    for name, value in features.items():
 
-        print(
-            "Power:",
-            round(
-                features["power"],
-                4
+        if "frequency" in name or name == "bandwidth":
+
+            print(
+                f"{name:20}: "
+                f"{value / 1e6:.6f} MHz"
             )
-        )
 
-        print(
-            "Mean Magnitude:",
-            round(
-                features["mean_magnitude"],
-                4
+        else:
+
+            print(
+                f"{name:20}: "
+                f"{value:.6f}"
             )
-        )
 
-        print(
-            "Standard Deviation:",
-            round(
-                features["std_magnitude"],
-                4
-            )
-        )
-
-        print(
-            "Bandwidth:",
-            round(
-                features["bandwidth"] / 1e3,
-                2
-            ),
-            "kHz"
-        )
-
-    print("\n============================")
-    print("Feature extraction complete!")
+    print()
+    print("=================================")
+    print(
+        "Feature extraction complete!"
+    )

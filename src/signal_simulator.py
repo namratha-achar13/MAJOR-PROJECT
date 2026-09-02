@@ -1,7 +1,18 @@
 import numpy as np
+from pathlib import Path
 
 
-def generate_signal(signal_type="wifi", num_samples=10000, sample_rate=2e6):
+SAMPLE_RATE = 20e6
+
+PROJECT_ROOT = Path(__file__).resolve().parent.parent
+DATA_DIR = PROJECT_ROOT / "data"
+
+
+def generate_signal(
+    signal_type="wifi",
+    num_samples=10000,
+    sample_rate=SAMPLE_RATE
+):
     """
     Generate a simulated RF I/Q signal.
 
@@ -14,10 +25,8 @@ def generate_signal(signal_type="wifi", num_samples=10000, sample_rate=2e6):
         Complex I/Q samples
     """
 
-    # Time axis
     t = np.arange(num_samples) / sample_rate
 
-    # Random noise
     noise = 0.05 * (
         np.random.randn(num_samples)
         + 1j * np.random.randn(num_samples)
@@ -28,7 +37,7 @@ def generate_signal(signal_type="wifi", num_samples=10000, sample_rate=2e6):
     # ------------------------------------------------
     if signal_type.lower() == "wifi":
 
-        frequency = 200e3
+        frequency = 2e6
 
         carrier = np.exp(
             2j * np.pi * frequency * t
@@ -45,7 +54,7 @@ def generate_signal(signal_type="wifi", num_samples=10000, sample_rate=2e6):
     # ------------------------------------------------
     elif signal_type.lower() == "bluetooth":
 
-        frequency = 500e3
+        frequency = 5e6
 
         modulation = 10e3 * np.sin(
             2 * np.pi * 1e3 * t
@@ -63,7 +72,7 @@ def generate_signal(signal_type="wifi", num_samples=10000, sample_rate=2e6):
     # ------------------------------------------------
     elif signal_type.lower() == "fm":
 
-        carrier_frequency = 300e3
+        carrier_frequency = 3e6
         modulation_frequency = 5e3
 
         phase = (
@@ -80,7 +89,7 @@ def generate_signal(signal_type="wifi", num_samples=10000, sample_rate=2e6):
     # ------------------------------------------------
     elif signal_type.lower() == "am":
 
-        carrier_frequency = 700e3
+        carrier_frequency = 7e6
         modulation_frequency = 5e3
 
         carrier = np.exp(
@@ -109,7 +118,6 @@ def generate_signal(signal_type="wifi", num_samples=10000, sample_rate=2e6):
 
 if __name__ == "__main__":
 
-    # Signal types we want to simulate
     signal_types = [
         "wifi",
         "bluetooth",
@@ -117,22 +125,24 @@ if __name__ == "__main__":
         "am"
     ]
 
+    DATA_DIR.mkdir(parents=True, exist_ok=True)
+
     print("RF Signal Dataset Generation")
     print("============================")
+    print(f"Sample rate: {SAMPLE_RATE / 1e6:.1f} MHz")
+    print()
 
-    # Generate each signal
     for signal_type in signal_types:
 
         signal = generate_signal(
-            signal_type=signal_type
+            signal_type=signal_type,
+            sample_rate=SAMPLE_RATE
         )
 
-        # File name
         filename = (
-            f"data/simulated_{signal_type}.npy"
+            DATA_DIR / f"simulated_{signal_type}.npy"
         )
 
-        # Save I/Q samples
         np.save(filename, signal)
 
         print(

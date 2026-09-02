@@ -2,7 +2,10 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-def analyze_signal(signal, sample_rate=2e6):
+SAMPLE_RATE = 20e6
+
+
+def analyze_signal(signal, sample_rate=SAMPLE_RATE):
     """
     Perform FFT analysis on an I/Q signal.
 
@@ -64,6 +67,8 @@ if __name__ == "__main__":
 
     print("RF SIGNAL ANALYSIS")
     print("==================")
+    print(f"Sample Rate: {SAMPLE_RATE / 1e6:.1f} MHz")
+    print()
 
     for signal_type in signal_types:
 
@@ -85,7 +90,7 @@ if __name__ == "__main__":
         print(
             f"{signal_type.upper():10} "
             f"| Peak Frequency: "
-            f"{peak_frequency / 1e3:.2f} kHz"
+            f"{peak_frequency / 1e6:.3f} MHz"
         )
 
     print("==================")
