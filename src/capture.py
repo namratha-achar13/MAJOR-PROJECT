@@ -7,7 +7,7 @@ from pathlib import Path
 # Pluto SDR Configuration
 # --------------------------------------------------
 
-PLUTO_URI = "usb:"
+PLUTO_URI = "usb:1.55.5"
 
 SAMPLE_RATE = 20_000_000           # 20 MHz
 CENTER_FREQUENCY = 2_437_000_000   # 2.437 GHz
