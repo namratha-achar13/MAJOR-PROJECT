@@ -27,4 +27,4 @@ Develop a low-cost AI-based RF monitoring system that can:
 - Git & GitHub
 
 ## Project Status
-🟢 Project Setup Phase
+🟢 COMPLETED
