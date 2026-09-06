@@ -35,11 +35,6 @@ The main objectives of this project are:
 8. Provide an interactive dashboard for RF analysis.
 9. Develop a system that can be extended to additional RF signal classes.
 
----
-
-# 🏗️ System Architecture
-
-```text
                     RF Signal
                         │
                         ▼
