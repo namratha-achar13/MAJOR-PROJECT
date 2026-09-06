@@ -81,6 +81,7 @@ The main objectives of this project are:
                        │
                        ▼
               Streamlit Dashboard
+
 ## 🛠️ Technologies Used
 
 ### Programming Language
