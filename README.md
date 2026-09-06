@@ -81,3 +81,33 @@ The main objectives of this project are:
                        │
                        ▼
               Streamlit Dashboard
+## 🛠️ Technologies Used
+
+### Programming Language
+- **Python** – Core programming language used for signal processing, feature extraction, machine learning, and dashboard development.
+
+### RF & SDR
+- **ADALM-PLUTO SDR** – Used for real-time RF signal acquisition and I/Q data capture.
+- **I/Q Signal Processing** – Used to represent and process captured RF signals.
+
+### Signal Processing
+- **NumPy** – Numerical computing and complex I/Q signal processing.
+- **SciPy** – Signal processing and spectral analysis.
+- **FFT (Fast Fourier Transform)** – Used for frequency-domain analysis.
+- **Spectrogram Analysis** – Used for time-frequency visualization of RF signals.
+
+### Machine Learning
+- **Scikit-learn** – Machine learning framework.
+- **Random Forest Classifier** – Used for RF signal classification.
+- **Joblib** – Used to save and load the trained machine learning model.
+
+### Data Processing & Visualization
+- **Pandas** – Dataset handling, feature processing, and CSV analysis.
+- **Matplotlib** – Frequency spectrum, spectrogram, and DOA visualization.
+
+### Dashboard
+- **Streamlit** – Used to develop the interactive RF signal analysis dashboard.
+
+### Development & Version Control
+- **Git** – Version control and project management.
+- **GitHub** – Repository hosting and collaboration.
